@@ -1,6 +1,4 @@
 from __future__ import print_function, division
-from collections import Counter
-from copy import copy
 
 import numpy as np
 
@@ -365,6 +363,18 @@ class MathTerm:
                 operand = operand.replace(string, substitue)
             new_operands.append(operand)
         self.operands = tuple(new_operands)
+
+    def list_variables(self):
+        variables = []
+        for operand in self.operands:
+            if isinstance(operand, MathTerm):  # call recursively on terms
+                variables += operand.list_variables()
+            else:
+                try:
+                    parse_operand(operand)
+                except ValueError:
+                    variables.append(operand)
+        return sorted(variables)
 
     def __call__(self, table=None):
         if self.operands is None:
