@@ -8,7 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="tabeval",
-    version="1.0",
+    version="1.1",
     author="Jan Luca van den Busch",
     description="Python eval() on key-value-based numerical data structures.",
     long_description=long_description,
