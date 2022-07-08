@@ -21,9 +21,9 @@ def test_identity(value):
     term = tabeval.MathTerm.from_string(str(value))
     if type(value) is str:
         with pytest.raises(ValueError):
-            term()
+            tabeval.evaluate(str(value))
     else:
-        assert term() == value
+        assert tabeval.evaluate(str(value)) == value
 
 
 @pytest.mark.parametrize(
@@ -32,9 +32,9 @@ def test_identity_with_data(value, dataset):
     term = tabeval.MathTerm.from_string(str(value))
     if type(value) is str:
         with pytest.raises(KeyError):
-            term(dataset)
+            tabeval.evaluate(str(value), dataset)
     else:
-        assert term(dataset) == value
+        assert tabeval.evaluate(str(value), dataset) == value
 
 
 @pytest.mark.parametrize(
@@ -49,7 +49,7 @@ def test_identity_with_data(value, dataset):
 ])
 def test_syntax_errors(math_string):
     with pytest.raises(SyntaxError):
-        tabeval.MathTerm.from_string(math_string)
+        tabeval.evaluate(math_string)
 
 
 @pytest.mark.parametrize(
@@ -79,10 +79,9 @@ def test_syntax_errors(math_string):
         "-4"
 ])
 def test_scalar(math_string, dataset):
-    term = tabeval.MathTerm.from_string(math_string)
     result = eval(math_string)
-    assert term() == result
-    assert term(dataset) == result
+    assert tabeval.evaluate(math_string) == result
+    assert tabeval.evaluate(math_string, dataset) == result
 
 
 @pytest.mark.parametrize(
@@ -98,25 +97,21 @@ def test_scalar(math_string, dataset):
         "2 * ((x) + y)",
 ])
 def test_vector(math_string, dataset):
-    term = tabeval.MathTerm.from_string(math_string)
     python_string = math_string\
         .replace("x", "dataset['x']")\
         .replace("y", "dataset['y']")
     result = eval(python_string)
-    npt.assert_array_equal(term(dataset), result)
+    npt.assert_array_equal(tabeval.evaluate(math_string, dataset), result)
 
 
 def test_vector_bad_values(dataset):
-    term = tabeval.MathTerm.from_string("x - is_string")
     with pytest.raises(TypeError):
-        term(dataset)
+        tabeval.evaluate("x - is_string", dataset)
 
 
 def test_vector_wrong_length(dataset):
-    term = tabeval.MathTerm.from_string("x - is_short")
     with pytest.raises(ValueError):
-        term(dataset)
-
+        tabeval.evaluate("x - is_short", dataset)
 
 def test_list_variables():
     term = tabeval.MathTerm.from_string("a *(x - 2) + b - alt / o**2")

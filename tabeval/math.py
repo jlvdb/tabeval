@@ -397,3 +397,26 @@ class MathTerm:
         # evaluate the operator ufunc
         result = self._operator.ufunc(*operand_values)  # call ufunc
         return result
+
+
+def evaluate(math_string, data=None):
+    """
+    Evaluate a mathematical expression on scalar or vector data (by providing a
+    table as optional input).
+
+    Parameters:
+    -----------
+    math_string : str
+        Mathematical expression to evaluate.
+    data : dict, numpy.recarray, pandas.DataFrame
+        Tabular data with columns identified through string column names that
+        can be used as variables in the expression (optional).
+
+    Returns:
+    --------
+    result : scalar or vector result
+        Result of the expression, scalar if no table columns are used as
+        variables, else vector result, applied to each item of the input data.
+    """
+    term = MathTerm.from_string(math_string)
+    return term(data)
