@@ -1,40 +1,45 @@
-from __future__ import print_function, division
+from __future__ import annotations, division, print_function
+
+from abc import ABC, abstractproperty
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 
-def identity(x):
+T = TypeVar("T", bool, int, float, str)
+idT = TypeVar("idT")
+
+
+def identity(x: idT) -> idT:
     return x
 
 
-class Operator(object):
+@dataclass(frozen=True)
+class Operator(ABC):
 
-    _props = [None, None, None]
+    identifier: str
+    ufunc: np.ufunc
+    rank: int
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         string = "{c:}({s:}, {u:})"
         string = string.format(
             c=self.__class__.__name__, s=str(self.symbol), u=str(self.ufunc))
         return string
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.symbol
 
     @property
-    def identifier(self):
-        return self._props[0]
-
-    @property
     def symbol(self):
-        return self._props[0].strip()
+        return self.identifier.strip()
 
-    @property
-    def ufunc(self):
-        return self._props[1]
-
-    @property
-    def rank(self):
-        return self._props[2]
+    @abstractproperty
+    def nargs(self) -> int:
+        return 2
 
 
 class OperatorR(Operator):
@@ -55,7 +60,7 @@ class OperatorLR(Operator):
 # represents it in standard python, a numpy ufunc that is applied to the
 # number 'nargs' of operands, and a rank specifying the precedence of the
 # operator compared to others.
-operator_list = []
+operator_list: list[Operator] = []
 for identifier, ufunc, rank, nargs in [
         # (identifier, ufunc, rank, nargs)
         # arithmetic operators
@@ -86,22 +91,22 @@ for identifier, ufunc, rank, nargs in [
         # identity
         ("ID ",   identity,          0, 1),
 ]:
-    operator = OperatorR() if nargs == 1 else OperatorLR()
-    operator._props = (identifier, ufunc, rank)
+    args = (identifier, ufunc, rank)
+    operator = OperatorR(*args) if nargs == 1 else OperatorLR(*args)
     operator_list.append(operator)
 # compile some useful listings of the operators
 operator_by_length = sorted(
     operator_list, key=lambda key: len(key.symbol), reverse=True)
-operator_dict = {}  # dictionary of lists
+operator_dict: dict[str, dict[str, Operator]] = {}  # dictionary of lists
 for operator in operator_list:
     symbol = operator.symbol
     if symbol not in operator_dict:
         operator_dict[symbol] = {}
-    key = "R" if type(operator) is OperatorR else "LR"
+    key = "R" if isinstance(operator, OperatorR) else "LR"
     operator_dict[symbol][key] = operator
 # assemble an hierarchical list of operators
 operator_max_rank = max(operator.rank for operator in operator_list)
-operator_hierarchy = []
+operator_hierarchy: list[list[Operator]] = []
 for rank in reversed(range(operator_max_rank + 1)):
     operators = [
         operator for operator in operator_list if operator.rank == rank]
@@ -109,7 +114,7 @@ for rank in reversed(range(operator_max_rank + 1)):
         operator_hierarchy.append(operators)
 
 
-def bracket_hierarchy(math_string):
+def bracket_hierarchy(math_string: str) -> list[str]:
     message = "too many {:} brackets"
     math_string_list = []
     level = 0
@@ -138,7 +143,7 @@ def bracket_hierarchy(math_string):
     return math_string_list
 
 
-def split_by_operator(math_string_list):
+def split_by_operator(math_string_list: list[str]) -> list[str]:
     math_string = math_string_list[0]
     for operator in operator_by_length:
         identifier = operator.identifier
@@ -167,7 +172,7 @@ def split_by_operator(math_string_list):
     return expanded_list
 
 
-def substitute_operators(math_string_list):
+def substitute_operators(math_string_list: list[str]) -> list[Operator | Any]:
     for i, entry in enumerate(math_string_list):
         try:
             overloads = operator_dict[entry]
@@ -186,7 +191,10 @@ def substitute_operators(math_string_list):
     return math_string_list
 
 
-def insert_term(math_string_list, idx):
+def insert_term(
+    math_string_list: list[Operator | Any],
+    idx: int
+) -> list[MathTerm]:
     operator = math_string_list[idx]
     # check if there is a valid right operand/operand
     if idx + 1 == len(math_string_list):
@@ -224,20 +232,20 @@ def insert_term(math_string_list, idx):
     return math_string_list
 
 
-def replace_entry(math_string_list):
+def replace_entry(math_string_list: list[Operator | Any]) -> list[MathTerm]:
     for operators in operator_hierarchy:
         for idx, entry in enumerate(math_string_list):
             if entry in operators:
                 return insert_term(math_string_list, idx)
 
 
-def resolve_brackets(math_string_list):
+def resolve_brackets(math_string_list: list[str]) -> list[Operator | Any]:
     # recursively unpack bracket terms
     expression_list = []
     for entry in math_string_list:
-        if type(entry) is list:
+        if isinstance(entry, list):
             expression_list.append(resolve_brackets(entry))
-        elif type(entry) is str:
+        elif isinstance(entry, str):
             expression_list.extend(split_by_operator([entry]))
         else:
             expression_list.append(entry)
@@ -255,8 +263,11 @@ def resolve_brackets(math_string_list):
     return term
 
 
-def parse_operand(string):
+def parse_operand(string: str) -> T:
     normlised = string.upper()
+    # check for string values wrapped in quotes ""/''
+    if normlised[0] in "'\"" and normlised[0] == normlised[-1]:
+        return normlised[1:-1]  # remove quotes
     # check for boolean values
     if normlised == "TRUE":
         return True
@@ -269,51 +280,54 @@ def parse_operand(string):
         try:
             return float(normlised)
         except ValueError:
-            message = "cannot convert '{:}' to numerical or boolean type"
-            raise ValueError(message.format(string))
+            msg = "cannot convert '{:}' to string, numerical or boolean type"
+            raise ValueError(msg.format(string))
 
 
 class MathTerm:
 
     _operands = None
 
-    def __init__(self, operator):
+    def __init__(self, operator: Operator) -> None:
         self._operator = operator
 
-    @staticmethod
-    def from_string(expression_string):
+    @classmethod
+    def from_string(cls, expression_string: str) -> MathTerm:
         # split the input on operator occurences
         math_levels = bracket_hierarchy(expression_string)
         try:
             term = resolve_brackets(math_levels)
-            assert(isinstance(term, MathTerm))
+            assert(isinstance(term, cls))
         except SyntaxError:
             raise SyntaxError("malformed expression '{:}'".format(
                 expression_string))
         except AssertionError:
             # treat as identity mapping
-            term = MathTerm(operator_dict["ID"]["R"])
+            term = cls(operator_dict["ID"]["R"])
             term.operands = (expression_string,)
         return term
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.expression})"
+
     @property
-    def symbol(self):
+    def symbol(self) -> str:
         return self._operator.symbol
 
     @property
-    def ufunc(self):
+    def ufunc(self) -> np.ufunc:
         return self._operator.ufunc
 
     @property
-    def nargs(self):
+    def nargs(self) -> int:
         return self._operator.nargs
 
     @property
-    def operands(self):
+    def operands(self) -> tuple[MathTerm | T] | None:
         return self._operands
 
     @operands.setter
-    def operands(self, operands):
+    def operands(self, operands: MathTerm | T) -> None:
         if type(operands) is not tuple:
             raise TypeError("operands must be tuple")
         if len(operands) != self.nargs:
@@ -323,7 +337,7 @@ class MathTerm:
         self._operands = tuple(operands)
 
     @property
-    def code(self):
+    def code(self) -> str:
         # ufunc([left operand, ] right operand)
         if self.operands is None:
             raise RuntimeError("operands not set")
@@ -338,7 +352,7 @@ class MathTerm:
         return code
 
     @property
-    def expression(self):
+    def expression(self) -> str:
         # [left operand] operator right operand 
         if self.operands is None:
             raise RuntimeError("operands not set")
@@ -354,7 +368,7 @@ class MathTerm:
         expression = " ".join(expression_list)
         return expression
 
-    def _substitute_characters(self, string, substitue):
+    def _substitute_characters(self, string: str, substitue: str) -> None:
         new_operands = []
         for operand in self._operands:
             if type(operand) is type(self):
@@ -364,7 +378,7 @@ class MathTerm:
             new_operands.append(operand)
         self.operands = tuple(new_operands)
 
-    def list_variables(self):
+    def list_variables(self) -> list[str]:
         variables = []
         for operand in self.operands:
             if isinstance(operand, MathTerm):  # call recursively on terms
@@ -376,10 +390,11 @@ class MathTerm:
                     variables.append(operand)
         return sorted(variables)
 
-    def __call__(self, table=None):
+    def __call__(self, table: Mapping[str, ArrayLike] = None) -> ArrayLike:
         if self.operands is None:
             raise RuntimeError("operands not set")
         # get the numerical values of the operands
+        require_str_ufunc = False
         operand_values = []
         for operand in self.operands:
             if isinstance(operand, MathTerm):  # call recursively on terms
@@ -387,19 +402,34 @@ class MathTerm:
             elif type(operand) is str:  # convert to numerical type
                 try:
                     values = parse_operand(operand)  # convert from string
-                except ValueError as e:
+                    if isinstance(values, str):
+                        require_str_ufunc = True
+                except ValueError:
                     if table is None:
-                        raise e
+                        raise
                     values = table[operand]  # get values from the table column
             else:
                 values = operand
             operand_values.append(values)
         # evaluate the operator ufunc
-        result = self._operator.ufunc(*operand_values)  # call ufunc
+        if require_str_ufunc:
+            if self._operator.symbol == "==":
+                result = np.char.equal(*operand_values)
+            elif self._operator.symbol == "!=":
+                result = np.char.not_equal(*operand_values)
+            else:
+                raise TypeError(
+                    f"string type constants do not support "
+                    f"operator '{self._operator.symbol}'")
+        else:
+            result = self._operator.ufunc(*operand_values)  # call ufunc
         return result
 
 
-def evaluate(math_string, data=None):
+def evaluate(
+    math_string: str,
+    data: Mapping[str, ArrayLike] = None
+) -> ArrayLike:
     """
     Evaluate a mathematical expression on scalar or vector data (by providing a
     table as optional input).
