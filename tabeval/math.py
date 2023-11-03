@@ -264,21 +264,21 @@ def resolve_brackets(math_string_list: list[str]) -> list[Operator | Any]:
 
 
 def parse_operand(string: str) -> T:
-    normlised = string.upper()
     # check for string values wrapped in quotes ""/''
-    if normlised[0] in "'\"" and normlised[0] == normlised[-1]:
-        return normlised[1:-1]  # remove quotes
+    if string[0] in "'\"" and string[0] == string[-1]:
+        return string[1:-1]  # remove quotes
     # check for boolean values
+    normlised = string.upper()
     if normlised == "TRUE":
         return True
     elif normlised == "FALSE":
         return False
     # convert to integer or floating point
     try:
-        return int(normlised)
+        return int(string)
     except (ValueError, OverflowError):  # inf raises OverflowError
         try:
-            return float(normlised)
+            return float(string)
         except ValueError:
             msg = "cannot convert '{:}' to string, numerical or boolean type"
             raise ValueError(msg.format(string))
